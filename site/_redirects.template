@@ -1,0 +1,8 @@
+# Netlify pass-through: every request that is not the preview page itself is proxied
+# to the space's Colorful demo website, so the website runs on THIS domain inside
+# Contentful Live Preview (Contentful only accepts Live Preview messages from the
+# origin of the configured preview URL).
+#
+# Replace WEBSITE_HOST with the host from the space's managed "Web Preview" URL,
+# e.g. colorful-demo-2-0-xxxxxxxxx.colorful-demo.com
+/*  https://WEBSITE_HOST/:splat  200

@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web + Omnichannel Preview</title>
+<style>
+  :root{--bg:#f4f6f8;--panel:#fff;--border:#e5ebed;--text:#1b273a;--muted:#67728a;--blue:#0059c8;--navy:#0b3a53;--teal:#0e7c8c}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;flex-direction:column}
+  /* preview bar — styled like Contentful's toolbar */
+  .bar{flex-shrink:0;height:40px;background:#fff;border-bottom:1px solid var(--border);box-shadow:0 2px 8px rgba(15,30,60,.06);display:flex;align-items:center;gap:10px;padding:0 12px;position:relative;z-index:10;font-size:13px}
+  .seg{display:flex;border:1px solid #cfd9e0;border-radius:6px;overflow:hidden;flex-shrink:0}
+  .seg button{border:0;background:#fff;padding:5px 12px;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit}
+  .seg button+button{border-left:1px solid #cfd9e0}
+  .seg button[aria-pressed=true]{background:#e8f1ff;color:var(--blue);font-weight:600}
+  .seg button:disabled{color:#c3cad4;cursor:not-allowed}
+  .tabs{display:flex;gap:2px;margin-left:6px;overflow-x:auto;scrollbar-width:none}
+  .tab{border:0;background:none;padding:6px 10px;border-radius:6px;color:var(--muted);font-size:13px;cursor:pointer;white-space:nowrap;font-family:inherit}
+  .tab:hover{background:#f6f8fa}
+  .tab[aria-selected=true]{background:#f0f3f5;color:var(--text);font-weight:600}
+  .status{margin-left:auto;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:50%;background:#aab4c0}
+  .dot.ok{background:#00a36c}.dot.warn{background:#e8a200}.dot.err{background:#d9304f}
+  .pin{display:none;border:0;background:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px 6px;border-radius:4px}
+  .pin[aria-pressed=true]{color:var(--blue);background:#e8f1ff}
+  /* Website view: the bar floats over the site and slides away, so the site starts at the very top
+     of the preview and Contentful's inspector outlines line up */
+  body.web .bar{position:fixed;top:0;left:0;right:0;transition:transform .25s ease;z-index:2147483000}
+  body.web .bar.away{transform:translateY(-100%)}
+  body.web .pin{display:inline-block}
+  .hot{display:none;position:fixed;top:0;left:0;right:0;height:10px;z-index:2147482998}
+  .handle{display:none;position:fixed;top:0;left:50%;transform:translateX(-50%);width:64px;height:6px;border-radius:0 0 6px 6px;background:var(--blue);opacity:.55;cursor:pointer;z-index:2147482999;border:0;padding:0}
+  body.web .hot,body.web .handle{display:block}
+  main{flex:1;min-height:0;position:relative}
+  iframe#web{border:0;width:100%;height:100%;display:block;background:#fff}
+  #omni{height:100%;overflow:auto;padding:32px 16px;display:flex;justify-content:center;align-items:flex-start}
+  .msg{max-width:520px;margin:40px auto;background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px;line-height:1.5}
+  .msg code{background:#f0f3f5;padding:1px 5px;border-radius:4px;font-size:12px}
+  .hidden{display:none!important}
+  img{max-width:100%;display:block}
+  .ph{background:linear-gradient(135deg,var(--navy),var(--teal) 60%,#5fc1cc)}
+  /* social */
+  .post{width:420px;max-width:100%;background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;line-height:1.5}
+  .post .hd{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+  .avatar{width:40px;height:40px;border-radius:50%;background:var(--teal);color:#fff;display:grid;place-items:center;font-weight:700;font-size:11px;flex-shrink:0}
+  .post .sub{color:var(--muted)}
+  .post .card{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:12px}
+  .post .card .media{aspect-ratio:1.91/1;object-fit:cover;width:100%}
+  .post .card .meta{padding:8px 12px;font-size:12px}
+  .post .card .meta b{display:block;font-size:13px}
+  .post .ft{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-top:10px}
+  .hash{color:#1d7bd8}
+  /* search */
+  .serp{width:640px;max-width:100%;background:#fff;border-radius:10px;padding:24px;font-family:arial,sans-serif}
+  .serp .q{border:1px solid #dfe1e5;border-radius:24px;padding:10px 18px;margin-bottom:24px;color:#202124}
+  .serp .site{display:flex;gap:10px;align-items:center;font-size:14px;color:#202124}
+  .serp .site .avatar{width:28px;height:28px;font-size:9px}
+  .serp .site small{display:block;color:#4d5156;font-size:12px}
+  .serp h3{color:#1a0dab;font-size:20px;font-weight:400;margin:6px 0 4px}
+  .serp p{color:#4d5156;margin:0;line-height:1.58}
+  .serp .count{margin-top:16px;font-size:11px;color:var(--muted)}
+  /* email */
+  .mail{width:600px;max-width:100%;background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .mail .env{padding:12px 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);line-height:1.6}
+  .mail .env b{color:var(--text)}
+  .mail .brand{background:var(--navy);color:#fff;padding:14px 24px;font-weight:700;letter-spacing:.3px}
+  .mail .media{width:100%;aspect-ratio:2/1;object-fit:cover}
+  .mail .content{padding:24px}
+  .mail h2{margin:0 0 12px;font-size:24px;line-height:1.25}
+  .mail p{line-height:1.6;color:#3b4658}
+  .btn{display:inline-block;background:var(--navy);color:#fff;border-radius:6px;padding:10px 18px;font-weight:600;text-decoration:none;margin:6px 8px 0 0;font-size:14px}
+  .btn.alt{background:#fff;color:var(--navy);border:1px solid var(--navy)}
+  .mail .foot{padding:16px 24px;background:#f7f9fa;font-size:11px;color:var(--muted)}
+  /* mobile */
+  .phone{width:320px;border:10px solid #1b273a;border-radius:40px;overflow:hidden;background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.15)}
+  .phone .notch{height:26px;background:#1b273a;position:relative}
+  .phone .notch:after{content:"";position:absolute;left:50%;top:0;width:110px;height:18px;background:#1b273a;border-radius:0 0 12px 12px;transform:translateX(-50%)}
+  .phone .appbar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);font-weight:700}
+  .phone .appbar .avatar{width:26px;height:26px;font-size:8px}
+  .phone .media{width:100%;aspect-ratio:4/3;object-fit:cover}
+  .phone .content{padding:16px}
+  .phone h2{font-size:20px;margin:0 0 8px;line-height:1.25}
+  .phone p{font-size:13px;line-height:1.5;color:#3b4658}
+  .phone .btn{display:block;text-align:center;margin:8px 0 0}
+  .phone .nav{display:flex;justify-content:space-around;padding:10px 0 14px;border-top:1px solid var(--border);color:var(--muted);font-size:11px}
+  /* screen */
+  .screen-wrap{width:100%;max-width:960px}
+  .screen{aspect-ratio:16/9;border:14px solid #111;border-radius:10px;position:relative;overflow:hidden;background:var(--navy);color:#fff}
+  .screen .media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .screen .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(11,58,83,.95) 0%,rgba(11,58,83,.75) 45%,rgba(11,58,83,0) 75%)}
+  .screen .content{position:absolute;left:6%;top:50%;transform:translateY(-50%);width:50%}
+  .screen h2{font-size:clamp(20px,3.6vw,44px);line-height:1.1;margin:0 0 12px}
+  .screen p{font-size:clamp(11px,1.3vw,16px);line-height:1.45;opacity:.92}
+  .screen .btn{background:#fff;color:var(--navy)}
+  .screen .logo{position:absolute;right:3%;bottom:5%;font-weight:700;font-size:clamp(11px,1.4vw,18px);opacity:.9}
+  .stand{width:28%;height:26px;margin:0 auto;background:linear-gradient(#333,#111);clip-path:polygon(35% 0,65% 0,100% 100%,0 100%)}
+</style>
+</head>
+<body>
+  <div class="hot" id="hot"></div>
+  <button type="button" class="handle" id="handle" title="Show preview bar" aria-label="Show preview bar"></button>
+  <div class="bar" id="bar" role="toolbar" aria-label="Preview view">
+    <div class="seg" role="group" aria-label="View">
+      <button type="button" data-v="web" aria-pressed="false">Website</button>
+      <button type="button" data-v="omni" aria-pressed="false">Omnichannel</button>
+    </div>
+    <div class="tabs hidden" id="tabs" role="tablist"></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">Loading…</span></div>
+    <button type="button" class="pin" id="pin" aria-pressed="false" title="Keep bar open">📌</button>
+  </div>
+  <main>
+    <iframe id="web" class="hidden" title="Web preview" allow="clipboard-write; fullscreen"></iframe>
+    <div id="omni" class="hidden"></div>
+  </main>
+
+<script type="module">
+/* ---------- params ---------- */
+const P = new URLSearchParams(location.search);
+const cfg = {
+  space: P.get('space'),
+  env: P.get('env') || 'master',
+  token: P.get('token'),                 // Content Preview API token
+  entry: P.get('entry'),
+  locale: P.get('locale') || 'en-US',
+  site: (P.get('site') || '').replace(/\/$/, ''),
+  secret: P.get('secret') || '',
+  ctype: P.get('ctype') || 'landingPage',
+  slug: P.get('slug') || '',
+  timeline: P.get('timeline') || '',
+  view: P.get('view') || 'web',
+  ch: P.get('ch') || 'social',
+  brand: P.get('brand') || '',
+};
+const CHANNELS = [
+  ['social', 'Paid Social'], ['search', 'Google Search'], ['email', 'Email'],
+  ['mobile', 'Mobile App'], ['screen', 'Trade-show Screen'],
+];
+const CONTENTFUL_ORIGINS = ['https://app.contentful.com', 'https://app.eu.contentful.com'];
+
+const $ = (id) => document.getElementById(id);
+const tabsEl = $('tabs'), webFrame = $('web'), omniEl = $('omni'), barEl = $('bar');
+const setStatus = (text, kind = '') => { $('statusText').textContent = text; $('dot').className = 'dot ' + kind; };
+const segBtns = [...document.querySelectorAll('.seg button')];
+
+// Website view only makes sense when we know the site + slug
+const webAvailable = !!(cfg.site && cfg.slug);
+if (!webAvailable) { segBtns[0].disabled = true; segBtns[0].title = 'No website page for this entry'; if (cfg.view === 'web') cfg.view = 'omni'; }
+segBtns.forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === cfg.view));
+
+// Switching view reloads this page with ?view=… so only ONE Live Preview connection exists at a time
+function go(changes) {
+  const q = new URLSearchParams(location.search);
+  Object.entries(changes).forEach(([k, v]) => q.set(k, v));
+  location.search = q.toString();
+}
+segBtns.forEach((b) => b.addEventListener('click', () => { if (!b.disabled && b.dataset.v !== cfg.view) go({ view: b.dataset.v }); }));
+
+/* ---------- WEBSITE VIEW ---------- */
+if (cfg.view === 'web') {
+  // The website is served through THIS domain (see _redirects), so Contentful accepts its Live Preview messages.
+  const u = new URL('/api/enable-draft', location.origin);
+  u.searchParams.set('ctype', cfg.ctype);
+  u.searchParams.set('slug', cfg.slug);
+  u.searchParams.set('locale', cfg.locale);
+  u.searchParams.set('secret', cfg.secret);
+  if (cfg.timeline) u.searchParams.set('timeline', cfg.timeline);
+  const pagePath = `/${cfg.locale}/${cfg.slug}`;
+  let fellBack = false;
+  webFrame.addEventListener('load', () => {
+    // If the site redirected to its own domain, reload the page through this domain (draft cookie is already set here)
+    try { void webFrame.contentWindow.location.href; }
+    catch { if (!fellBack) { fellBack = true; webFrame.src = pagePath; } }
+  });
+  webFrame.src = u.pathname + u.search;
+  webFrame.classList.remove('hidden');
+  setStatus('Web Preview · draft content', 'ok');
+  // Sliding bar: floats over the site (which starts at the very top) and hides itself after a moment
+  document.body.classList.add('web');
+  const pin = $('pin');
+  const pinned = { get(){ try { return sessionStorage.getItem('barPinned') === '1'; } catch { return false; } },
+                   set(v){ try { sessionStorage.setItem('barPinned', v ? '1' : '0'); } catch {} } };
+  let hideTimer;
+  const hideSoon = () => { clearTimeout(hideTimer); if (pin.getAttribute('aria-pressed') === 'true') return;
+                           hideTimer = setTimeout(() => barEl.classList.add('away'), 2000); };
+  const showBar = () => { barEl.classList.remove('away'); hideSoon(); };
+  $('hot').addEventListener('mouseenter', showBar);
+  $('handle').addEventListener('click', showBar);
+  barEl.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+  barEl.addEventListener('mouseleave', hideSoon);
+  barEl.addEventListener('focusin', () => { clearTimeout(hideTimer); barEl.classList.remove('away'); });
+  pin.addEventListener('click', () => {
+    const on = pin.getAttribute('aria-pressed') !== 'true';
+    pin.setAttribute('aria-pressed', on); pinned.set(on);
+    on ? (clearTimeout(hideTimer), barEl.classList.remove('away')) : hideSoon();
+  });
+  if (pinned.get()) pin.setAttribute('aria-pressed', 'true');
+  hideSoon();
+
+  // The website's Live Preview SDK talks UP to Contentful directly (window.top).
+  // Contentful talks DOWN only to its direct iframe (this page), so relay those messages to the website.
+  window.addEventListener('message', (e) => {
+    if (e.source === window.parent && e.data && e.data.source === 'live-preview-editor') {
+      webFrame.contentWindow && webFrame.contentWindow.postMessage(e.data, '*');
+    }
+  });
+}
+
+/* ---------- OMNICHANNEL VIEW ---------- */
+if (cfg.view === 'omni') {
+  tabsEl.classList.remove('hidden');
+  tabsEl.innerHTML = CHANNELS.map(([id, name]) =>
+    `<button class="tab" role="tab" data-ch="${id}" aria-selected="${id === cfg.ch}">${name}</button>`).join('');
+  tabsEl.addEventListener('click', (e) => {
+    const b = e.target.closest('.tab'); if (!b) return;
+    cfg.ch = b.dataset.ch;
+    tabsEl.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', t === b));
+    const q = new URLSearchParams(location.search); q.set('ch', cfg.ch); history.replaceState(null, '', '?' + q);
+    render();
+  });
+  omniEl.classList.remove('hidden');
+  startOmni();
+}
+
+let root = null;          // resolved entry (landing page or banner), contentful.js-like shape
+let SDK = null;
+
+async function startOmni() {
+  if (!cfg.space || !cfg.token || !cfg.entry) {
+    omniEl.innerHTML = `<div class="msg"><b>Missing settings.</b><br>This preview needs <code>space</code>, <code>token</code> and <code>entry</code> in its URL. Check the preview URL in Settings → Content preview.</div>`;
+    setStatus('Not configured', 'err'); return;
+  }
+  omniEl.innerHTML = `<div class="msg">Loading content…</div>`;
+  try {
+    root = await fetchEntry();
+  } catch (err) {
+    omniEl.innerHTML = `<div class="msg"><b>Couldn't load the entry.</b><br>${esc(err.message)}</div>`;
+    setStatus('Load failed', 'err'); return;
+  }
+  render();
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/@contentful/live-preview@4.10.26/+esm');
+    SDK = mod.ContentfulLivePreview;
+    await SDK.init({
+      locale: cfg.locale, space: cfg.space, environment: cfg.env,
+      enableInspectorMode: true, enableLiveUpdates: true, targetOrigin: CONTENTFUL_ORIGINS,
+    });
+    // live updates while typing
+    SDK.subscribe('edit', { data: root, locale: cfg.locale, callback: (d) => { root = d; render(); } });
+    // after autosave, refetch so linked entries/assets swapped in the editor also show up
+    SDK.subscribe('save', { callback: async () => { try { root = await fetchEntry(); render(); } catch {} } });
+  } catch (err) {
+    console.warn('Live Preview SDK not started', err);
+  }
+}
+
+/* ---------- data ---------- */
+let usingPublished = false;
+async function fetchEntry() {
+  const q = `spaces/${cfg.space}/environments/${cfg.env}/entries?sys.id=${encodeURIComponent(cfg.entry)}&include=4&locale=${encodeURIComponent(cfg.locale)}&access_token=${encodeURIComponent(cfg.token)}`;
+  let res = await fetch('https://preview.contentful.com/' + q);
+  usingPublished = false;
+  if (res.status === 401 || res.status === 403) {        // token is a Delivery token → published content only
+    res = await fetch('https://cdn.contentful.com/' + q);
+    usingPublished = true;
+  }
+  if (!res.ok) throw new Error(`Contentful API returned ${res.status}`);
+  const json = await res.json();
+  if (!json.items.length) throw new Error('Entry not found (it may not exist in this environment).');
+  setStatus(usingPublished ? 'Published content only — use a Preview API token for drafts' : 'Live · draft content',
+            usingPublished ? 'warn' : 'ok');
+  return resolve(json);
+}
+function resolve(json) {
+  const idx = {};
+  [...(json.includes?.Entry || []), ...(json.includes?.Asset || []), ...json.items]
+    .forEach((x) => { idx[x.sys.type + ':' + x.sys.id] = x; });
+  const seen = new Map();
+  const walk = (v, depth) => {
+    if (Array.isArray(v)) return v.map((x) => walk(x, depth)).filter((x) => x !== undefined);
+    if (v && v.sys && v.sys.type === 'Link') {
+      const t = idx[v.sys.linkType + ':' + v.sys.id];
+      if (!t) return undefined;
+      return node(t, depth + 1);
+    }
+    return v;
+  };
+  const node = (x, depth) => {
+    const key = x.sys.type + ':' + x.sys.id;
+    if (seen.has(key)) return seen.get(key);
+    const out = { sys: x.sys, fields: {} };
+    if (x.metadata) out.metadata = x.metadata;
+    seen.set(key, out);
+    if (depth < 6) Object.entries(x.fields || {}).forEach(([k, v]) => {
+      // leave rich text documents as-is
+      out.fields[k] = (v && v.nodeType === 'document') ? v : walk(v, depth);
+    });
+    return out;
+  };
+  return node(json.items[0], 0);
+}
+
+/* ---------- mapping ---------- */
+const ctOf = (e) => e?.sys?.contentType?.sys?.id;
+function model() {
+  const isBanner = ['banner', 'callToAction'].includes(ctOf(root));
+  const page = isBanner ? null : root;
+  // Use the Hero field; if it is empty, fall back to the first Banner / Call to Action in Sections
+  const firstSection = (page?.fields?.sections || []).find((x) => ['banner', 'callToAction'].includes(ctOf(x)));
+  const hero = isBanner ? root : (page?.fields?.hero || firstSection || null);
+  const seo = page?.fields?.seoMetadata || null;
+  const media = hero?.fields?.media || page?.fields?.media || null;
+  // Banner heroes have a Links field; Call to Action heroes carry their own label + URL
+  const isCta = ctOf(hero) === 'callToAction';
+  const links = isCta ? (hero.fields.label ? [{ sys: hero.sys, fields: { label: hero.fields.label, externalTarget: hero.fields.urlTarget } }] : [])
+                      : (hero?.fields?.links || []).filter(Boolean);
+  const img = imageOf(media) || (seo?.fields?.image ? assetInfo(seo.fields.image, seo.fields.imageAlt) : null);
+  const brandFromSeo = (seo?.fields?.title || '').split('|')[0].trim();
+  const brand = cfg.brand || brandFromSeo || (cfg.site ? new URL(cfg.site).hostname.split('.')[0] : 'Brand');
+  const absLink = links.map((l) => l.fields?.externalTarget).find((t) => /^https?:\/\//.test(t || ''));
+  const domain = absLink ? new URL(absLink).hostname : (cfg.site ? new URL(cfg.site).hostname : 'example.com');
+  return { page, hero, seo, media, links, img, brand, domain };
+}
+function assetInfo(asset, alt) {
+  const f = asset?.fields?.file; if (!f?.url) return null;
+  return { url: 'https:' + f.url.replace(/^https?:/, ''), alt: alt || asset.fields.title || '', assetId: asset.sys.id };
+}
+function imageOf(media) {
+  if (!media) return null;
+  if (media.sys?.type === 'Asset') return assetInfo(media);
+  const f = media.fields || {};
+  if (f.image) { const a = assetInfo(f.image, f.altText); if (a) { a.entryId = media.sys.id; } return a; }
+  if (f.url && /^https?:/.test(f.url)) return { url: f.url, alt: f.altText || '', entryId: media.sys.id };
+  return null;
+}
+function richText(doc) {
+  if (!doc || !doc.content) return '';
+  const txt = (n) => n.nodeType === 'text' ? n.value : (n.content || []).map(txt).join('');
+  return doc.content.filter((n) => n.nodeType !== 'embedded-entry-block').map(txt).filter(Boolean).join('\n\n');
+}
+
+/* ---------- inspector tags ---------- */
+const tag = (entity, fieldId) => {
+  if (!entity?.sys?.id) return '';
+  const k = entity.sys.type === 'Asset' ? 'data-contentful-asset-id' : 'data-contentful-entry-id';
+  return ` ${k}="${entity.sys.id}" data-contentful-field-id="${fieldId}" data-contentful-locale="${cfg.locale}"`;
+};
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nl2br = (s) => esc(s).replace(/\n/g, '<br>');
+const imgSize = (u, w) => u + (u.includes('images.ctfassets.net') || u.includes('ctfassets') ? `?w=${w}&fm=webp&q=80` : '');
+
+function mediaHtml(m, cls, w) {
+  if (m.img) {
+    const t = m.img.entryId ? tag(m.media, 'image') : (m.img.assetId ? ` data-contentful-asset-id="${m.img.assetId}"` : '');
+    return `<img class="${cls}" src="${esc(imgSize(m.img.url, w))}" alt="${esc(m.img.alt)}"${t}>`;
+  }
+  return `<div class="${cls} ph"${m.media ? tag(m.media, 'image') : ''}></div>`;
+}
+function ctas(m, altSecond = true) {
+  return m.links.map((l, i) => `<a class="btn${altSecond && i ? ' alt' : ''}"${tag(l, 'label')}>${esc(l.fields?.label || '')}</a>`).join('');
+}
+const initials = (b) => b.split(/\s+/).map((w) => w[0]).join('').slice(0, 3).toUpperCase();
+
+/* ---------- channels ---------- */
+function render() {
+  if (!root) return;
+  const m = model();
+  const H = m.hero, h = H?.fields || {};
+  const heading = h.heading || '';
+  const body = richText(h.body);
+  const views = {
+    social() {
+      const keywords = (m.seo?.fields?.keywords || []).slice(0, 2).map((k) => '#' + k.replace(/[^\p{L}\p{N}]/gu, ''));
+      const len = (heading + '\n\n' + body).length;
+      return `<div class="post">
+        <div class="hd"><div class="avatar">${esc(initials(m.brand))}</div>
+          <div><b>${esc(m.brand)}</b> <span class="sub">@${esc(m.brand.replace(/\s+/g, ''))} · Sponsored</span></div></div>
+        <div${tag(H, 'heading')}>${esc(heading)}</div><br>
+        <div${tag(H, 'body')}>${nl2br(body)}</div>
+        ${keywords.length ? `<div class="hash"${m.seo ? tag(m.seo, 'keywords') : ''}>${esc(keywords.join(' '))}</div>` : ''}
+        <div class="card">${mediaHtml(m, 'media', 900)}
+          <div class="meta">${esc(m.domain)}<b${tag(H, 'heading')}>${esc(heading)}</b></div></div>
+        <div class="ft"><span>💬 12</span><span>🔁 34</span><span>♥ 128</span><span${len > 280 ? ' style="color:#d9304f"' : ''}>${len} / 280 characters</span></div>
+      </div>`;
+    },
+    search() {
+      const S = m.seo, s = S?.fields || {}, p = m.page?.fields || {};
+      const title = s.title || p.title || heading, desc = s.description || p.teaser || body;
+      const titleTag = S && s.title ? tag(S, 'title') : (p.title ? tag(m.page, 'title') : tag(H, 'heading'));
+      const descTag = S && s.description ? tag(S, 'description') : (p.teaser ? tag(m.page, 'teaser') : tag(H, 'body'));
+      const path = p.slug ? ' › ' + p.slug : '';
+      return `<div class="serp">
+        <div class="q">${esc((m.seo?.fields?.keywords || [m.brand])[0])}</div>
+        <div class="site"><div class="avatar">${esc(initials(m.brand))}</div><div>${esc(m.brand)}<small>https://${esc(m.domain)}${esc(path)}</small></div></div>
+        <h3${titleTag}>${esc(title)}</h3>
+        <p${descTag}>${esc(desc)}</p>
+        <div class="count">Title ${title.length}/60 · Description ${desc.length}/160</div>
+      </div>`;
+    },
+    email() {
+      const p = m.page?.fields || {};
+      return `<div class="mail">
+        <div class="env"><b>From:</b> ${esc(m.brand)} &lt;news@${esc(m.domain.replace(/^www\./, ''))}&gt;<br>
+          <b>Subject:</b> <span${tag(H, 'heading')}>${esc(heading)}</span><br>
+          ${p.teaser ? `<b>Preview:</b> <span${tag(m.page, 'teaser')}>${esc(p.teaser.slice(0, 110))}…</span>` : ''}</div>
+        <div class="brand">${esc(m.brand)}</div>
+        ${mediaHtml(m, 'media', 1200)}
+        <div class="content"><h2${tag(H, 'heading')}>${esc(heading)}</h2>
+          <p${tag(H, 'body')}>${nl2br(body)}</p>${ctas(m)}</div>
+        <div class="foot">You're receiving this email because you subscribed to ${esc(m.brand)} updates. Unsubscribe</div>
+      </div>`;
+    },
+    mobile() {
+      return `<div class="phone"><div class="notch"></div>
+        <div class="appbar"><div class="avatar">${esc(initials(m.brand))}</div>${esc(m.brand)}</div>
+        ${mediaHtml(m, 'media', 700)}
+        <div class="content"><h2${tag(H, 'heading')}>${esc(heading)}</h2>
+          <p${tag(H, 'body')}>${nl2br(body)}</p>${ctas(m)}</div>
+        <div class="nav"><span>Home</span><span>Shop</span><span>Orders</span><span>Account</span></div></div>`;
+    },
+    screen() {
+      return `<div class="screen-wrap"><div class="screen">${mediaHtml(m, 'media', 1920)}<div class="shade"></div>
+        <div class="content"><h2${tag(H, 'heading')}>${esc(heading)}</h2>
+          <p${tag(H, 'body')}>${nl2br(body)}</p>${m.links[0] ? ctas({ links: [m.links[0]] }) : ''}</div>
+        <div class="logo">${esc(m.brand)}</div></div><div class="stand"></div></div>`;
+    },
+  };
+  if (!H) {
+    omniEl.innerHTML = `<div class="msg"><b>No hero banner on this entry.</b><br>Add a Banner or Call to Action to the <i>Hero</i> field (or to <i>Sections</i>) and it will appear here.</div>`;
+    return;
+  }
+  omniEl.innerHTML = (views[cfg.ch] || views.social)();
+}
+</script>
+</body>
+</html>
